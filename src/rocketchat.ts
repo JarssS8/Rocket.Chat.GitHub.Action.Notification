@@ -1,8 +1,8 @@
 import * as github from '@actions/github';
 import * as core from '@actions/core';
-import {Context} from '@actions/github/lib/context';
+import { Context } from '@actions/github/lib/context';
 import axios from 'axios';
-import {OctokitOptions} from '@octokit/core/dist-types/types';
+import { OctokitOptions } from '@octokit/core/dist-types/types';
 
 export interface IncomingWebhookDefaultArguments {
 	username: string;
@@ -40,14 +40,14 @@ class Helper {
 	}
 
 	public get isPullRequest(): boolean {
-		const {eventName} = this.context;
+		const { eventName } = this.context;
 		return eventName === 'pull_request';
 	}
 
 	public get baseFields(): any[] {
-		const {sha, eventName, workflow, ref} = this.context;
-		const {owner, repo} = this.context.repo;
-		const {number} = this.context.issue;
+		const { sha, eventName } = this.context;
+		const { owner, repo } = this.context.repo;
+		const { number } = this.context.issue;
 
 		const githubUrl: string = process.env.GITHUB_URL || core.getInput('github_url') || 'https://github.com';
 		const repoUrl: string = `${githubUrl}/${owner}/${repo}`;
@@ -61,11 +61,16 @@ class Helper {
 			actionUrl += `/commit/${sha}/checks`;
 		}
 
+		const failedJobsTitle = this.context.payload.workflow_run.display_title;
+		const failedJobsUrl = this.context.payload.workflow_run.html_url;
+		const branch = this.context.payload.workflow_run.head_branch;
+		const commitsUrl = `${repoUrl}/commits/${branch}`;
+
 		return [
 			{
 				short: true,
-				title: 'ref',
-				value: ref
+				title: 'ran branch',
+				value: branch
 			},
 			{
 				short: true,
@@ -74,8 +79,13 @@ class Helper {
 			},
 			{
 				short: true,
-				title: 'workflow',
-				value: `[${workflow}](${actionUrl})`
+				title: 'failed workflow',
+				value: `[${failedJobsTitle}](${failedJobsUrl})`
+			},
+			{
+				short: true,
+				title: 'last commits',
+				value: `[Commits](${commitsUrl})`
 			},
 			{
 				short: false,
@@ -86,7 +96,7 @@ class Helper {
 	}
 
 	public async getCommitFields(token: string, githubUrl: string): Promise<any[]> {
-		const {owner, repo} = this.context.repo;
+		const { owner, repo } = this.context.repo;
 		const head_ref: string = process.env.GITHUB_HEAD_REF as string;
 		const ref: string = this.isPullRequest ? head_ref.replace(/refs\/heads\//, '') : this.context.sha;
 
@@ -104,7 +114,7 @@ class Helper {
 		}
 
 		const client = github.getOctokit(token, options);
-		const {data: commit} = await client.rest.repos.getCommit({owner, repo, ref});
+		const { data: commit } = await client.rest.repos.getCommit({ owner, repo, ref });
 
 		const authorName: string = commit.commit.author?.name || commit.author?.login || 'Unknown';
 		const authorUrl: string = commit.author?.html_url || '';

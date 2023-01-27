@@ -40,7 +40,7 @@ async function run() {
 		const payload = await rocketchat.generatePayload(jobName, status, mention, mentionCondition, commitFlag, githubUrl, token);
 		await rocketchat.notify(url, options, payload);
 		console.info('Sent message to Rocket.Chat');
-	} catch (err) {
+	} catch (err: any) {
 		core.setFailed(err.message);
 	}
 }

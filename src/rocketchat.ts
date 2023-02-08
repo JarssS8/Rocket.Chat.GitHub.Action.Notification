@@ -95,6 +95,26 @@ class Helper {
 		];
 	}
 
+	public async getCommits(token: string, githubUrl: string, branch: string) {
+		let options: OctokitOptions = {
+			log: {
+				debug: console.debug,
+				info: console.info,
+				warn: console.warn,
+				error: console.error
+			}
+		};
+		const { owner, repo } = this.context.repo;
+		const octokit = github.getOctokit(token, options);
+		const { data: commits } = await octokit.rest.repos.listCommits({
+			owner,
+			repo,
+			// sha: branch
+		});
+		console.log(commits);
+
+	}
+
 	public async getCommitFields(token: string, githubUrl: string): Promise<any[]> {
 		const { owner, repo } = this.context.repo;
 		const head_ref: string = process.env.GITHUB_HEAD_REF as string;
@@ -151,6 +171,7 @@ export class RocketChat {
 
 		if (commitFlag && token) {
 			const commitFields = await helper.getCommitFields(token, githubUrl);
+			const commitsInfo = await helper.getCommits(token, githubUrl, "master");
 			Array.prototype.push.apply(fields, commitFields);
 		}
 

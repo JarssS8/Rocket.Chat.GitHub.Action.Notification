@@ -1,12 +1,12 @@
 import * as core from '@actions/core';
 
-import {validateStatus, isValidCondition} from './utils';
-import {RocketChat, IncomingWebhookDefaultArguments} from './rocketchat';
+import { validateStatus, isValidCondition } from './utils';
+import { RocketChat, IncomingWebhookDefaultArguments } from './rocketchat';
 
 async function run() {
 	try {
-		const status: string = validateStatus(core.getInput('type', {required: true}).toLowerCase());
-		const jobName: string = core.getInput('job_name', {required: true});
+		const status: string = validateStatus(core.getInput('type', { required: true }).toLowerCase());
+		const jobName: string = core.getInput('job_name', { required: true });
 		const url: string = process.env.ROCKETCHAT_WEBHOOK || core.getInput('url');
 		const githubUrl: string = process.env.GITHUB_URL || core.getInput('github_url');
 		let mention: string = core.getInput('mention');
@@ -18,6 +18,9 @@ async function run() {
 		};
 		const commitFlag: boolean = core.getInput('commit') === 'true';
 		const token: string = core.getInput('token');
+		const additionalURL: boolean = core.getInput('additional_url') === 'true';
+		const additionalURLName: string = core.getInput('additional_url_name');
+		const additionalURLValue: string = core.getInput('additional_url_value');
 
 		if (mention && !isValidCondition(mentionCondition)) {
 			mention = '';
@@ -36,8 +39,9 @@ async function run() {
 			`);
 		}
 
+
 		const rocketchat = new RocketChat();
-		const payload = await rocketchat.generatePayload(jobName, status, mention, mentionCondition, commitFlag, githubUrl, token);
+		const payload = await rocketchat.generatePayload(jobName, status, mention, mentionCondition, commitFlag, githubUrl, additionalURL, token, additionalURLName, additionalURLValue);
 		await rocketchat.notify(url, options, payload);
 		console.info('Sent message to Rocket.Chat');
 	} catch (err: any) {

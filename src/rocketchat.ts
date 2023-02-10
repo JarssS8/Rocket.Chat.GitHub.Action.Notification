@@ -3,7 +3,6 @@ import * as core from '@actions/core';
 import { Context } from '@actions/github/lib/context';
 import axios from 'axios';
 import { OctokitOptions } from '@octokit/core/dist-types/types';
-import { Octokit } from '@octokit/core';
 import { Committer } from './utils';
 
 export interface IncomingWebhookDefaultArguments {
@@ -181,46 +180,6 @@ class Helper {
 		}];
 	}
 
-	public async getCommitFields(token: string, githubUrl: string): Promise<any[]> {
-		const { owner, repo } = this.context.repo;
-		const head_ref: string = process.env.GITHUB_HEAD_REF as string;
-		const ref: string = this.isPullRequest ? head_ref.replace(/refs\/heads\//, '') : this.context.sha;
-
-		let options: OctokitOptions = {
-			log: {
-				debug: console.debug,
-				info: console.info,
-				warn: console.warn,
-				error: console.error
-			}
-		};
-
-		if (githubUrl) {
-			options.baseUrl = `${githubUrl}/api/v3`;
-		}
-
-		const client = github.getOctokit(token, options);
-		const { data: commit } = await client.rest.repos.getCommit({ owner, repo, ref });
-
-		const authorName: string = commit.commit.author?.name || commit.author?.login || 'Unknown';
-		const authorUrl: string = commit.author?.html_url || '';
-		const commitMsg: string = commit.commit.message;
-		const commitUrl: string = commit.html_url;
-		const fields = [
-			{
-				short: true,
-				title: 'commit',
-				value: `[${commitMsg}](${commitUrl})`
-			},
-			{
-				short: true,
-				title: 'authors',
-				value: `[${authorName}]${authorUrl ? `(${authorUrl})` : ''}`
-			}
-		];
-		return fields;
-	}
-
 	public async getAdditionalURLFields(additionalURLName: string, additionalURLValue: string) {
 		return [
 			{
@@ -247,7 +206,6 @@ export class RocketChat {
 		const fields = helper.baseFields;
 
 		if (commitFlag && token) {
-			// const commitFields = await helper.getCommitFields(token, githubUrl);
 			const commitsInfo = await helper.getPossibleGuiltiesCommitter(token, helper.getBranch);
 			if (commitsInfo.length > 0) {
 				Array.prototype.push.apply(fields, commitsInfo);

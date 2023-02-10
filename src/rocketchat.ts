@@ -3,6 +3,7 @@ import * as core from '@actions/core';
 import { Context } from '@actions/github/lib/context';
 import axios from 'axios';
 import { OctokitOptions } from '@octokit/core/dist-types/types';
+import { Committer } from './utils';
 
 export interface IncomingWebhookDefaultArguments {
 	username: string;
@@ -44,6 +45,10 @@ class Helper {
 		return eventName === 'pull_request';
 	}
 
+	public get getBranch(): string {
+		return this.context.payload.workflow_run.head_branch;
+	}
+
 	public get baseFields(): any[] {
 		const { sha, eventName } = this.context;
 		const { owner, repo } = this.context.repo;
@@ -51,6 +56,7 @@ class Helper {
 
 		const githubUrl: string = process.env.GITHUB_URL || core.getInput('github_url') || 'https://github.com';
 		const repoUrl: string = `${githubUrl}/${owner}/${repo}`;
+		const branch = this.getBranch;
 		let actionUrl: string = repoUrl;
 		let eventUrl: string = eventName;
 
@@ -61,9 +67,8 @@ class Helper {
 			actionUrl += `/commit/${sha}/checks`;
 		}
 
-		const failedJobsTitle = this.context.payload.workflow_run.display_title;
+		const failedJobsTitle = this.context.payload.workflow_run.name;
 		const failedJobsUrl = this.context.payload.workflow_run.html_url;
-		const branch = this.context.payload.workflow_run.head_branch;
 		const commitsUrl = `${repoUrl}/commits/${branch}`;
 
 		return [
@@ -95,11 +100,61 @@ class Helper {
 		];
 	}
 
-	public async getCommitFields(token: string, githubUrl: string): Promise<any[]> {
-		const { owner, repo } = this.context.repo;
-		const head_ref: string = process.env.GITHUB_HEAD_REF as string;
-		const ref: string = this.isPullRequest ? head_ref.replace(/refs\/heads\//, '') : this.context.sha;
+	private async getFirstFailedWorkflowAfterSuccess(octokit, owner: string, repo: string, branch: string): Promise<any> {
+		const workflows = await octokit.rest.actions.listWorkflowRunsForRepo({ owner, repo });
+		const workflowRuns = workflows.data.workflow_runs.filter(run =>
+			run.name !== this.context.workflow
+		);
 
+		let lastWorkflow = null;
+		for (const workflow of workflowRuns) {
+			if (workflow.head_branch === branch && workflow.status === "completed") {
+				if (workflow.conclusion === "success") {
+					break;
+				} else if (workflow.conclusion === "failure") {
+					lastWorkflow = workflow;
+				}
+
+			}
+		}
+
+		if (lastWorkflow === null) {
+			lastWorkflow = workflowRuns.last();
+		}
+		return lastWorkflow;
+	}
+
+	private async getCommitsSinceWorkflow(octokit, owner: string, repo: string, workflow: any): Promise<any[]> {
+		let latestRunTimestamp = workflow.run_started_at;
+
+		if (!latestRunTimestamp) {
+			console.error("No completed runs found for the specified workflow.");
+			return [];
+		}
+		const commits = await octokit.rest.repos.listCommits({ owner, repo });
+		return commits.data;
+	}
+
+
+
+	private async getCommitters(commits: any[]): Promise<Committer[]> {
+		const uniqueCommitters: { [url: string]: Committer } = {};
+
+		for (const commit of commits) {
+			const commiter = commit.author;
+			if (uniqueCommitters[commiter.html_url]) {
+				continue;
+			}
+
+			uniqueCommitters[commiter.html_url] = { name: commiter.login || "", url: commiter.html_url };
+		}
+
+		return Object.values(uniqueCommitters);
+	}
+
+
+	public async getPossibleGuiltiesCommitter(token: string, branch: string) {
+		let result = [];
 		let options: OctokitOptions = {
 			log: {
 				debug: console.debug,
@@ -108,31 +163,32 @@ class Helper {
 				error: console.error
 			}
 		};
+		const { owner, repo } = this.context.repo;
+		const octokit = github.getOctokit(token, options);
 
-		if (githubUrl) {
-			options.baseUrl = `${githubUrl}/api/v3`;
-		}
+		const workflow = await this.getFirstFailedWorkflowAfterSuccess(octokit, owner, repo, branch);
+		if (!workflow) { return result; }
+		const commits = await this.getCommitsSinceWorkflow(octokit, owner, repo, workflow);
+		if (!commits || commits.length <= 0) { return result; }
+		const committers = await this.getCommitters(commits);
 
-		const client = github.getOctokit(token, options);
-		const { data: commit } = await client.rest.repos.getCommit({ owner, repo, ref });
+		const commitersString: string = committers.map((committer) => `[${committer.name}](${committer.url})`).join("\n");
+		return [{
+			short: true,
+			title: 'Last Commiters',
+			value: commitersString
+		}];
+	}
 
-		const authorName: string = commit.commit.author?.name || commit.author?.login || 'Unknown';
-		const authorUrl: string = commit.author?.html_url || '';
-		const commitMsg: string = commit.commit.message;
-		const commitUrl: string = commit.html_url;
-		const fields = [
+	public async getAdditionalURLFields(additionalURLName: string, additionalURLValue: string) {
+		return [
 			{
 				short: true,
-				title: 'commit',
-				value: `[${commitMsg}](${commitUrl})`
-			},
-			{
-				short: true,
-				title: 'author',
-				value: `[${authorName}]${authorUrl ? `(${authorUrl})` : ''}`
+				title: additionalURLName,
+				value: `[Link](${additionalURLValue})`
 			}
+
 		];
-		return fields;
 	}
 }
 
@@ -141,7 +197,7 @@ export class RocketChat {
 		return condition === 'always' || condition === status;
 	}
 
-	public async generatePayload(jobName: string, status: string, mention: string, mentionCondition: string, commitFlag: boolean, githubUrl: string, token?: string): Promise<any> {
+	public async generatePayload(jobName: string, status: string, mention: string, mentionCondition: string, commitFlag: boolean, githubUrl: string, additionalURL: boolean, token?: string, additionalURLName?: string, additionalURLValue?: string): Promise<any> {
 		const helper = new Helper();
 		const notificationType: Accessory = helper[status];
 		const tmpText: string = `${jobName} ${notificationType.result}`;
@@ -150,8 +206,15 @@ export class RocketChat {
 		const fields = helper.baseFields;
 
 		if (commitFlag && token) {
-			const commitFields = await helper.getCommitFields(token, githubUrl);
-			Array.prototype.push.apply(fields, commitFields);
+			const commitsInfo = await helper.getPossibleGuiltiesCommitter(token, helper.getBranch);
+			if (commitsInfo.length > 0) {
+				Array.prototype.push.apply(fields, commitsInfo);
+			}
+		}
+
+		if (additionalURL && additionalURLName && additionalURLValue) {
+			const additionalURLFields = await helper.getAdditionalURLFields(additionalURLName, additionalURLValue);
+			Array.prototype.push.apply(fields, additionalURLFields);
 		}
 
 		const attachments = {

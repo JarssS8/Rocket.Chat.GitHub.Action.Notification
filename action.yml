@@ -36,6 +36,15 @@ inputs:
   github_url:
     description: 'needed for GitHub Enterprise'
     required: false
+  additional_url:
+    description: 'whether include additional data or not (true or false)'
+    required: false
+  additional_url_name:
+    description: 'tittle of the additional url'
+    required: false
+  additional_url_value:
+    description: 'url of the additional url'
+    required: false
 runs:
   using: 'node16'
   main: 'dist/index.js'

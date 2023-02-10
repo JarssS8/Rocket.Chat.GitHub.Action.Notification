@@ -1,6 +1,11 @@
 const jobStatuses: string[] = ['success', 'failure', 'cancelled'];
 const mentionConditions: string[] = [...jobStatuses, 'always'];
 
+export interface Committer {
+	name: string;
+	url: string;
+}
+
 function isValid(target: string, validList: string[]): boolean {
 	return validList.includes(target);
 }

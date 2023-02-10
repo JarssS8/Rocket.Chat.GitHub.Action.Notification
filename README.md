@@ -34,6 +34,9 @@ You can customize the following parameters:
 |commit|optional|false|If true, Rocket.Chat notification includes the latest commit message and author.|
 |github_url|optional|N/A|Required for GitHub Enterprise deployments.|
 |token|case by case|N/A|This token is used to get commit data.<br>If commit parameter is true, this parameter is required.<br>${{ secrets.GITHUB_TOKEN }} is recommended.|
+|additional_url|optional|false|If true, can add an Additional URL to be included in the notification message.|
+|additional_url_name|optional|N/A|Additional URL name field.|
+|additional_url_value|optional|N/A|Additional URL link field.|
 
 Please refer `action.yml` for more details.
 
@@ -52,7 +55,7 @@ Please refer `action.yml` for more details.
     url: ${{ secrets.ROCKETCHAT_WEBHOOK }}
 ```
 
-↓ Including the latest commit data
+↓ Including the latest commit data and additional URL
 
 ```..github/workflows/example2.yml
 - name: Rocket.Chat Notification
@@ -67,6 +70,9 @@ Please refer `action.yml` for more details.
     url: ${{ secrets.ROCKETCHAT_WEBHOOK }}
     commit: true
     token: ${{ secrets.GITHUB_TOKEN }}
+    additional_url: true
+    additional_url_name: 'GitHub Actions'
+    additional_url_value: 'https://www.google.com/search?client=firefox-b-d&q=github+actions'
 ```
 
 # Rocket.Chat UI Example
